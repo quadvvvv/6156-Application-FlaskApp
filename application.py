@@ -6,8 +6,20 @@
 #     "password": "6156dbdesperado",
 #     "database": "postgres",
 
+# from avro.io import BinaryEncoder, DatumWriter
+# import avro.schema as schema
+import io
+import json
+
+
+from google.api_core.exceptions import NotFound
+from google.cloud.pubsub import PublisherClient
+# from google.pubsub_v1.types import Encoding
+from google.cloud import pubsub_v1
+
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
+# from avro import schema, io
 import os 
 
 # App Engine App: This refers to the specific instance of your application hosted on Google App Engine. 
@@ -17,11 +29,41 @@ import os
 # Cloud Storage, Compute Engine instances, and more. It defines the namespace for your 
 # resources and provides a way to manage and organize them.
 
-# note: direct connections to external databases, like an AWS RDS instance, are not allowed due to security and networking restrictions.
+# note: direct connections to external databases, like an AWS RDS instance, are not allowed due to security and networking restrictions
 
 app = Flask(__name__)
 
-# Replace with your RDS database URI
+# Event publishing related setup
+project_id = 'application-microservice'
+topic_name = 'status-update-result'
+
+# Create a Pub/Sub publisher client
+publisher = pubsub_v1.PublisherClient()
+
+# Define the topic path
+topic_path = publisher.topic_path(project_id, topic_name)
+
+# avro_schema = schema.Parse("""
+# {
+#   "type": "record",
+#   "name": "ApplicationStatusUpdate",
+#   "fields": [
+#     {"name": "application_id", "type": "string"},
+#     {"name": "applicant_email", "type": "string"},
+#     {"name": "new_status", "type": "string"}
+#   ]
+# }
+# """)
+
+# # Function to serialize data using Avro schema
+# def serialize_avro(avro_schema, data):
+#     writer = io.DatumWriter(avro_schema)
+#     bytes_writer = io.BytesIO()
+#     encoder = io.BinaryEncoder(bytes_writer)
+#     writer.write(data, encoder)
+#     return bytes_writer.getvalue()
+
+# Database related setup
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://desperado:6156dbdesperado@desperado-db.ctldmj6kaxoc.us-east-2.rds.amazonaws.com:5432/application'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -45,7 +87,7 @@ db.create_all()
 def get_dummy():
     return jsonify({"message": f"Helloworld"}), 200
 
-@app.route('/application/all', methods=['GET'])
+@app.route('/application/', methods=['GET'])
 def get_all_applications():
     applications = Application.query.all()
     result = [{"applicationid": app.applicationid, "jobid": app.jobid, "applicantname": app.applicantname, "applicantemail": app.applicantemail, "recruitername": app.recruitername, "status": app.status} for app in applications]
@@ -77,6 +119,7 @@ def get_jobseeker_applications(jobseekerEmail):
 def create_application():
     data = request.json
     new_application = Application(
+        #TODO: update this part generate consistent formatted id
         applicationid=str(len(Application.query.all()) + 1),
         jobid=data.get('jobid'),
         applicantname=data.get('applicantname'),
@@ -96,8 +139,23 @@ def update_application_status(application_id):
         data = request.json
         new_status = data.get('status')
         if new_status:
+            # Updat the status in the database
             application.status = new_status
             db.session.commit()
+
+            # Publish an event to the Pub/Sub topic
+            message_data = {
+                'application_id': application_id,
+                'applicant_email': application.applicantemail,
+                'new_status': new_status
+            }
+            message_data = json.dumps(message_data)
+            data = message_data.encode("utf-8")
+            future = publisher.publish(topic_path, data)
+
+            # Wait for the message to be published (optional)
+            future.result()
+
             return jsonify({"message": f"Application status updated to {new_status}"}), 200
         else:
             return jsonify({"error": "Missing 'status' field in the request body"}), 400
