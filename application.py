@@ -8,8 +8,16 @@
 
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
+import os 
 
-#  direct connections to external databases, like an AWS RDS instance, are not allowed due to security and networking restrictions.
+# App Engine App: This refers to the specific instance of your application hosted on Google App Engine. 
+# It includes configuration settings, deployment details, and the runtime environment.
+
+# Project: In GCP, a project is a container for resources such as App Engine apps, 
+# Cloud Storage, Compute Engine instances, and more. It defines the namespace for your 
+# resources and provides a way to manage and organize them.
+
+# note: direct connections to external databases, like an AWS RDS instance, are not allowed due to security and networking restrictions.
 
 app = Flask(__name__)
 
@@ -108,4 +116,6 @@ def withdraw_application(application_id):
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Use os.environ.get('PORT', 5000) to dynamically get the port
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
