@@ -102,6 +102,18 @@ def get_application(application_id):
     else:
         return jsonify({"error": "Application not found"}), 404
 
+@app.route('/application/total_count', methods=['GET'])
+def get_total_count():
+    try:
+        # Execute a query to get the total count
+        total_count = db.session.query(Application).count()
+
+        # Return the total count as a JSON response
+        return jsonify({"total_count": total_count})
+
+    except Exception as e:
+        # Handle exceptions, log errors, etc.
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/application/recruiters/<recruiterEmail>', methods=['GET'])
 def get_recruiter_applications(recruiterEmail):
