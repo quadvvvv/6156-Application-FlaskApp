@@ -1,16 +1,6 @@
-# app.py
-
-#    "host": "desperado-db.ctldmj6kaxoc.us-east-2.rds.amazonaws.com",
-#     "port": 5432,
-#     "user": "desperado",
-#     "password": "6156dbdesperado",
-#     "database": "postgres",
-
-# from avro.io import BinaryEncoder, DatumWriter
-# import avro.schema as schema
 import io
 import json
-
+import uuid
 
 from google.api_core.exceptions import NotFound
 from google.cloud.pubsub import PublisherClient
@@ -42,26 +32,6 @@ publisher = pubsub_v1.PublisherClient()
 
 # Define the topic path
 topic_path = publisher.topic_path(project_id, topic_name)
-
-# avro_schema = schema.Parse("""
-# {
-#   "type": "record",
-#   "name": "ApplicationStatusUpdate",
-#   "fields": [
-#     {"name": "application_id", "type": "string"},
-#     {"name": "applicant_email", "type": "string"},
-#     {"name": "new_status", "type": "string"}
-#   ]
-# }
-# """)
-
-# # Function to serialize data using Avro schema
-# def serialize_avro(avro_schema, data):
-#     writer = io.DatumWriter(avro_schema)
-#     bytes_writer = io.BytesIO()
-#     encoder = io.BinaryEncoder(bytes_writer)
-#     writer.write(data, encoder)
-#     return bytes_writer.getvalue()
 
 # Database related setup
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://desperado:6156dbdesperado@desperado-db.ctldmj6kaxoc.us-east-2.rds.amazonaws.com:5432/application'
@@ -98,7 +68,7 @@ def get_all_applications():
 def get_application(application_id):
     application = Application.query.get(application_id)
     if application:
-        return jsonify({"applicationid": application.applicationid, "jobid": application.jobid, "applicantname": application.applicantname, "applicantemail": application.applicantemail, "recruitername": application.recruitername, "status": application.status})
+        return jsonify({"applicationid": application.applicationid, "jobid": application.jobid, "applicantname": application.applicantname, "applicantemail": application.applicantemail, "recruitername": application.recruitername, "recruiteremail": application.recruiteremail, "status": application.status})
     else:
         return jsonify({"error": "Application not found"}), 404
 
@@ -117,7 +87,7 @@ def get_total_count():
 
 @app.route('/application/recruiters/<recruiterEmail>', methods=['GET'])
 def get_recruiter_applications(recruiterEmail):
-    recruiter_applications = Application.query.filter_by(recruiterEmail=recruiterEmail).all()
+    recruiter_applications = Application.query.filter_by(recruiteremail=recruiterEmail).all()
     result = [{"applicationid": app.applicationid, "jobid": app.jobid, "applicantname": app.applicantname, "applicantemail": app.applicantemail, "recruitername": app.recruitername, "status": app.status} for app in recruiter_applications]
     return jsonify(result)
 
@@ -130,14 +100,15 @@ def get_jobseeker_applications(jobseekerEmail):
 @app.route('/application', methods=['POST'])
 def create_application():
     data = request.json
+    new_uuid = uuid.uuid4()
+    uuid_without_hyphens = str(new_uuid).replace("-", "")
     new_application = Application(
-        #TODO: update this part generate consistent formatted id
-        applicationid=str(len(Application.query.all()) + 1),
+        applicationid= (uuid_without_hyphens),
         jobid=data.get('jobid'),
         applicantname=data.get('applicantname'),
         applicantemail=data.get('applicantemail'),
         recruitername=data.get('recruitername'),
-        recruiterEmail=data.get('recruiterEmail'),
+        recruiteremail=data.get('recruiteremail'),
         status='Pending'
     )
     db.session.add(new_application)
@@ -165,7 +136,7 @@ def update_application_status(application_id):
             data = message_data.encode("utf-8")
             future = publisher.publish(topic_path, data)
 
-            # Wait for the message to be published (optional)
+            # Wait for the message to be published
             future.result()
 
             return jsonify({"message": f"Application status updated to {new_status}"}), 200
