@@ -26,7 +26,7 @@ def app_update_sendgrid(cloud_event):
 
     # hard coded to focalpoint's email for now
     message = Mail(
-        from_email='qvduo2021@gmail.com',
+        from_email='someEmail@somewhere.com',
         to_emails= 'yn2443@columbia.edu',
         subject= f"🎉 Application {application_id} Status Update",
         html_content= f"""
